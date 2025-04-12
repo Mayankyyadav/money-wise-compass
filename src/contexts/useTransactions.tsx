@@ -1,12 +1,12 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { Transaction, UserBudget } from '@/types/finance';
-import { Toast } from '@/hooks/use-toast';
+import { toast as uiToastType } from '@/hooks/use-toast';
 
 export const useTransactions = (
   budget: UserBudget,
   setBudget: React.Dispatch<React.SetStateAction<UserBudget>>,
-  uiToast: Toast,
+  uiToast: typeof uiToastType,
   distributeIncome: (amount: number) => any[]
 ) => {
   const addIncome = (amount: number, description: string) => {

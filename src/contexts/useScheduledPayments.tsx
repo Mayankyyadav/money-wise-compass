@@ -1,12 +1,12 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { ScheduledPayment, UserBudget } from '@/types/finance';
-import { Toast } from '@/hooks/use-toast';
+import { toast as uiToastType } from '@/hooks/use-toast';
 
 export const useScheduledPayments = (
   budget: UserBudget,
   setBudget: React.Dispatch<React.SetStateAction<UserBudget>>,
-  uiToast: Toast,
+  uiToast: typeof uiToastType,
   processPayment: (
     currentBudget: UserBudget,
     amount: number,

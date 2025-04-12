@@ -1,12 +1,12 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { Transaction, UserBudget } from '@/types/finance';
-import { Toast } from '@/hooks/use-toast';
+import { toast as uiToastType } from '@/hooks/use-toast';
 
 export const usePayments = (
   budget: UserBudget,
   setBudget: React.Dispatch<React.SetStateAction<UserBudget>>,
-  uiToast: Toast
+  uiToast: typeof uiToastType
 ) => {
   // A helper function to process a payment from one or more categories
   const processPayment = (

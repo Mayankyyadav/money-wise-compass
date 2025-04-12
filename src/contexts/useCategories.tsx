@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Category, UserBudget } from '@/types/finance';
-import { Toast } from '@/hooks/use-toast';
+import { toast as uiToastType } from '@/hooks/use-toast';
 
 export const DEFAULT_CATEGORIES: Category[] = [
   {
@@ -68,7 +68,7 @@ export const DEFAULT_CATEGORIES: Category[] = [
 export const useCategories = (
   budget: UserBudget, 
   setBudget: React.Dispatch<React.SetStateAction<UserBudget>>,
-  uiToast: Toast
+  uiToast: typeof uiToastType
 ) => {
   // Calculate how much to allocate to each category
   const distributeIncome = (amount: number) => {
