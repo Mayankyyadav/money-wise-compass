@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Settings } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const CategoryPriorityForm = () => {
   const { budget, updateCategoryPriorities } = useFinance();
@@ -92,56 +93,58 @@ const CategoryPriorityForm = () => {
               Higher priority categories are filled first when income is received, and are used last when making payments.
             </div>
             
-            <div className="space-y-3">
-              {categories.map((category, index) => (
-                <div key={category.id} className="flex items-center gap-2">
-                  <div className="flex-1 p-3 border rounded-md">
-                    <div className="flex justify-between items-center">
-                      <span className="font-medium">{category.name}</span>
-                      <div className="flex space-x-2">
-                        <Button 
-                          type="button" 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => moveUp(index)}
-                          disabled={index === 0}
-                        >
-                          ↑
-                        </Button>
-                        <Button 
-                          type="button" 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => moveDown(index)}
-                          disabled={index === categories.length - 1}
-                        >
-                          ↓
-                        </Button>
-                      </div>
-                    </div>
-                    
-                    {category.name !== 'Daily Use' && (
-                      <div className="mt-2">
-                        <Label htmlFor={`max-${category.id}`}>Max Amount ($)</Label>
-                        <Input
-                          id={`max-${category.id}`}
-                          type="number"
-                          placeholder="No limit"
-                          value={category.maxAmount === undefined ? '' : category.maxAmount}
-                          onChange={(e) => handleMaxAmountChange(category.id, e.target.value)}
-                          min="0"
-                          step="0.01"
-                          className="mt-1"
-                        />
-                        <div className="text-xs text-muted-foreground mt-1">
-                          When this amount is reached, excess funds go to Savings
+            <ScrollArea className="h-[400px] pr-4">
+              <div className="space-y-3">
+                {categories.map((category, index) => (
+                  <div key={category.id} className="flex items-center gap-2">
+                    <div className="flex-1 p-3 border rounded-md">
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium">{category.name}</span>
+                        <div className="flex space-x-2">
+                          <Button 
+                            type="button" 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => moveUp(index)}
+                            disabled={index === 0}
+                          >
+                            ↑
+                          </Button>
+                          <Button 
+                            type="button" 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => moveDown(index)}
+                            disabled={index === categories.length - 1}
+                          >
+                            ↓
+                          </Button>
                         </div>
                       </div>
-                    )}
+                      
+                      {category.name !== 'Daily Use' && (
+                        <div className="mt-2">
+                          <Label htmlFor={`max-${category.id}`}>Max Amount ($)</Label>
+                          <Input
+                            id={`max-${category.id}`}
+                            type="number"
+                            placeholder="No limit"
+                            value={category.maxAmount === undefined ? '' : category.maxAmount}
+                            onChange={(e) => handleMaxAmountChange(category.id, e.target.value)}
+                            min="0"
+                            step="0.01"
+                            className="mt-1"
+                          />
+                          <div className="text-xs text-muted-foreground mt-1">
+                            When this amount is reached, excess funds go to Savings
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </ScrollArea>
           </div>
           
           <Button type="submit" className="w-full">Save Changes</Button>
