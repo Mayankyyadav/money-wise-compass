@@ -145,7 +145,7 @@ const PaymentForm = () => {
                 <SelectValue placeholder="Auto (Daily Use then Savings)" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Auto (Daily Use then Savings)</SelectItem>
+                <SelectItem value="auto">Auto (Daily Use then Savings)</SelectItem>
                 {budget.categories.map(category => (
                   <SelectItem key={category.id} value={category.id}>
                     {category.name} - ${category.amount.toFixed(2)}
