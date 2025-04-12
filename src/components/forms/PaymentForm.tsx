@@ -6,13 +6,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { CreditCard, Calendar, Clock } from 'lucide-react';
+import { CreditCard, Calendar, Clock, Check } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const PaymentForm = () => {
   const [open, setOpen] = useState(false);
@@ -25,7 +26,7 @@ const PaymentForm = () => {
   const [preferredCategory, setPreferredCategory] = useState('');
   const [insufficientFunds, setInsufficientFunds] = useState(false);
   const [remainingAmount, setRemainingAmount] = useState(0);
-  const [fallbackCategory, setFallbackCategory] = useState('');
+  const [fallbackCategories, setFallbackCategories] = useState<string[]>([]);
   
   const { budget, makePayment, schedulePayment } = useFinance();
 
@@ -39,7 +40,7 @@ const PaymentForm = () => {
     setPreferredCategory('');
     setInsufficientFunds(false);
     setRemainingAmount(0);
-    setFallbackCategory('');
+    setFallbackCategories([]);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -62,7 +63,8 @@ const PaymentForm = () => {
         date: paymentDate,
         recurring: frequency !== 'once',
         frequency: frequency === 'once' ? undefined : frequency,
-        preferredCategory: preferredCategory || undefined
+        preferredCategory: preferredCategory || undefined,
+        fallbackCategories: fallbackCategories.length > 0 ? fallbackCategories : undefined
       });
       
       resetForm();
@@ -75,7 +77,7 @@ const PaymentForm = () => {
       numAmount, 
       description, 
       preferredCategory || undefined, 
-      fallbackCategory || undefined
+      fallbackCategories.length > 0 ? fallbackCategories : undefined
     );
     
     if (result.success) {
@@ -85,6 +87,14 @@ const PaymentForm = () => {
       setInsufficientFunds(true);
       setRemainingAmount(result.remainingAmount || 0);
     }
+  };
+
+  const toggleFallbackCategory = (categoryId: string) => {
+    setFallbackCategories(prev => 
+      prev.includes(categoryId)
+        ? prev.filter(id => id !== categoryId)
+        : [...prev, categoryId]
+    );
   };
 
   return (
@@ -160,30 +170,31 @@ const PaymentForm = () => {
               <Alert variant="destructive" className="my-2">
                 <AlertDescription>
                   Insufficient funds! You need an additional ${remainingAmount.toFixed(2)} to complete this payment.
-                  Please select another category to deduct from:
+                  Please select one or more categories to deduct from:
                 </AlertDescription>
               </Alert>
               <div className="space-y-2">
-                <Label htmlFor="fallback-category">Fallback Category</Label>
-                <Select 
-                  value={fallbackCategory} 
-                  onValueChange={setFallbackCategory}
-                  required
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {budget.categories
-                      .filter(c => c.amount > 0 && c.id !== preferredCategory)
-                      .map(category => (
-                        <SelectItem key={category.id} value={category.id}>
+                <Label>Fallback Categories</Label>
+                <div className="max-h-[150px] overflow-y-auto border rounded-md p-2 space-y-2">
+                  {budget.categories
+                    .filter(c => c.amount > 0 && c.id !== preferredCategory)
+                    .map(category => (
+                      <div key={category.id} className="flex items-center space-x-2">
+                        <Checkbox 
+                          id={`category-${category.id}`} 
+                          checked={fallbackCategories.includes(category.id)}
+                          onCheckedChange={() => toggleFallbackCategory(category.id)}
+                        />
+                        <label 
+                          htmlFor={`category-${category.id}`}
+                          className="text-sm flex-1 cursor-pointer"
+                        >
                           {category.name} - ${category.amount.toFixed(2)}
-                        </SelectItem>
-                      ))
-                    }
-                  </SelectContent>
-                </Select>
+                        </label>
+                      </div>
+                    ))
+                  }
+                </div>
               </div>
             </>
           )}
@@ -252,6 +263,32 @@ const PaymentForm = () => {
                   </SelectContent>
                 </Select>
               </div>
+
+              {!insufficientFunds && (
+                <div className="space-y-2">
+                  <Label>Additional Fallback Categories (Optional)</Label>
+                  <div className="max-h-[150px] overflow-y-auto border rounded-md p-2 space-y-2">
+                    {budget.categories
+                      .filter(c => c.id !== preferredCategory)
+                      .map(category => (
+                        <div key={category.id} className="flex items-center space-x-2">
+                          <Checkbox 
+                            id={`schedule-category-${category.id}`} 
+                            checked={fallbackCategories.includes(category.id)}
+                            onCheckedChange={() => toggleFallbackCategory(category.id)}
+                          />
+                          <label 
+                            htmlFor={`schedule-category-${category.id}`}
+                            className="text-sm flex-1 cursor-pointer"
+                          >
+                            {category.name} - ${category.amount.toFixed(2)}
+                          </label>
+                        </div>
+                      ))
+                    }
+                  </div>
+                </div>
+              )}
             </div>
           )}
           

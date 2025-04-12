@@ -14,7 +14,7 @@ export const usePayments = (
     amount: number,
     description: string,
     preferredCategoryId?: string,
-    fallbackCategoryId?: string
+    fallbackCategoryIds?: string[]
   ) => {
     let updatedCategories = [...currentBudget.categories];
     let remainingAmount = amount;
@@ -67,10 +67,15 @@ export const usePayments = (
       }
     }
     
-    // If fallback category is specified and we still need more
-    if (remainingAmount > 0 && fallbackCategoryId) {
-      const withdrawn = withdrawFromCat(fallbackCategoryId, remainingAmount);
-      remainingAmount -= withdrawn;
+    // If fallback categories are specified and we still need more
+    if (remainingAmount > 0 && fallbackCategoryIds && fallbackCategoryIds.length > 0) {
+      // Try each fallback category in order
+      for (const categoryId of fallbackCategoryIds) {
+        if (remainingAmount <= 0) break;
+        
+        const withdrawn = withdrawFromCat(categoryId, remainingAmount);
+        remainingAmount -= withdrawn;
+      }
     }
     
     // If we've managed to cover the amount
@@ -109,7 +114,7 @@ export const usePayments = (
     amount: number,
     description: string,
     preferredCategoryId?: string,
-    fallbackCategoryId?: string
+    fallbackCategoryIds?: string[]
   ) => {
     if (amount <= 0) {
       uiToast({
@@ -125,7 +130,7 @@ export const usePayments = (
       amount,
       description,
       preferredCategoryId,
-      fallbackCategoryId
+      fallbackCategoryIds
     );
     
     if (result.success) {

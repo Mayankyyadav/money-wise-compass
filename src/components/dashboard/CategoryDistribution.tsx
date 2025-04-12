@@ -35,30 +35,6 @@ const CategoryDistribution: React.FC<CategoryDistributionProps> = ({
         </Button>
       </div>
 
-      <div className="h-[300px] w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={data}
-              cx="50%"
-              cy="50%"
-              labelLine={false}
-              outerRadius={80}
-              dataKey="value"
-            >
-              {data.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.color} />
-              ))}
-            </Pie>
-            <Tooltip 
-              formatter={(value: number) => [`$${value.toFixed(2)}`, 'Amount']}
-              labelFormatter={(name) => `${name}`}
-            />
-            <Legend layout="vertical" verticalAlign="middle" align="right" />
-          </PieChart>
-        </ResponsiveContainer>
-      </div>
-
       <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
         {categories.map(category => (
           <div 
@@ -80,6 +56,30 @@ const CategoryDistribution: React.FC<CategoryDistributionProps> = ({
             </Button>
           </div>
         ))}
+      </div>
+
+      <div className="h-[300px] w-full mt-6">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={data}
+              cx="50%"
+              cy="50%"
+              labelLine={false}
+              outerRadius={80}
+              dataKey="value"
+            >
+              {data.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.color} />
+              ))}
+            </Pie>
+            <Tooltip 
+              formatter={(value: number) => [`$${value.toFixed(2)}`, 'Amount']}
+              labelFormatter={(name) => `${name}`}
+            />
+            <Legend layout="vertical" verticalAlign="middle" align="right" />
+          </PieChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );

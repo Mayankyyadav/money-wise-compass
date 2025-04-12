@@ -12,7 +12,7 @@ export const useScheduledPayments = (
     amount: number,
     description: string,
     preferredCategoryId?: string,
-    fallbackCategoryId?: string
+    fallbackCategoryIds?: string[]
   ) => any
 ) => {
   // Schedule a payment
@@ -23,8 +23,9 @@ export const useScheduledPayments = (
     recurring?: boolean;
     frequency?: 'daily' | 'weekly' | 'monthly';
     preferredCategory?: string;
+    fallbackCategories?: string[];
   }) => {
-    const { amount, description, date, recurring = false, frequency, preferredCategory } = options;
+    const { amount, description, date, recurring = false, frequency, preferredCategory, fallbackCategories } = options;
     
     if (amount <= 0) {
       uiToast({
@@ -44,6 +45,7 @@ export const useScheduledPayments = (
       id: uuidv4(),
       amount,
       category: preferredCategory || '', // Empty string means auto (Daily Use, then Savings)
+      fallbackCategories: fallbackCategories || [],
       description,
       nextDate: date,
       recurring,

@@ -22,12 +22,13 @@ export interface Transaction {
 export interface ScheduledPayment {
   id: string;
   amount: number;
-  category: string;
+  category: string; // Empty string means auto (Daily Use, then Savings)
+  fallbackCategories?: string[];
   description: string;
   nextDate: Date;
   recurring: boolean;
   frequency?: 'daily' | 'weekly' | 'monthly';
-  time?: string; // Time in HH:MM format
+  time?: string; // Format: "HH:MM"
   active: boolean;
 }
 

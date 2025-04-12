@@ -50,6 +50,11 @@ const ScheduledPayments = () => {
                 <span>
                   From: {getCategoryNameById(payment.category)}
                 </span>
+                {payment.fallbackCategories && payment.fallbackCategories.length > 0 && (
+                  <span className="w-full mt-1">
+                    Fallbacks: {payment.fallbackCategories.map(catId => getCategoryNameById(catId)).join(', ')}
+                  </span>
+                )}
               </div>
             </div>
             
