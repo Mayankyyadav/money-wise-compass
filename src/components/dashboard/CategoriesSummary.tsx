@@ -57,7 +57,6 @@ const CategoriesSummary = () => {
               <Progress 
                 value={percentage} 
                 className="h-2"
-                indicatorClassName="bg-gradient-to-r" 
                 style={{ 
                   background: `${category.color}20`,
                   '--tw-gradient-from': `${category.color}80`,

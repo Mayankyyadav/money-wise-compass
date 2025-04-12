@@ -1,7 +1,8 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Category, Transaction, UserBudget } from '@/types/finance';
+import { Category, Transaction, UserBudget, ScheduledPayment } from '@/types/finance';
 import { useToast } from '@/components/ui/use-toast';
+import { toast } from '@/components/ui/sonner';
 import { v4 as uuidv4 } from 'uuid';
 
 interface FinanceContextType {
@@ -12,6 +13,19 @@ interface FinanceContextType {
   updateCategory: (category: Category) => void;
   deleteCategory: (categoryId: string) => void;
   getDailyBalance: () => number;
+  makePayment: (amount: number, description: string, preferredCategoryId?: string, fallbackCategoryId?: string) => 
+    { success: boolean; insufficientFunds?: boolean; remainingAmount?: number };
+  schedulePayment: (options: {
+    amount: number;
+    description: string;
+    date: Date;
+    recurring?: boolean;
+    frequency?: 'daily' | 'weekly' | 'monthly';
+    preferredCategory?: string;
+  }) => void;
+  toggleScheduledPayment: (paymentId: string, active: boolean) => void;
+  cancelScheduledPayment: (paymentId: string) => void;
+  updateCategoryPriorities: (categories: Array<{ id: string; priority: number; maxAmount: number | undefined }>) => void;
 }
 
 const DEFAULT_CATEGORIES: Category[] = [
@@ -22,6 +36,7 @@ const DEFAULT_CATEGORIES: Category[] = [
     amount: 200,
     color: '#3B82F6', // blue
     icon: 'piggy-bank',
+    priority: 1,
   },
   {
     id: '2',
@@ -30,6 +45,8 @@ const DEFAULT_CATEGORIES: Category[] = [
     amount: 300,
     color: '#EF4444', // red
     icon: 'receipt',
+    priority: 2,
+    maxAmount: 500,
   },
   {
     id: '3',
@@ -38,6 +55,8 @@ const DEFAULT_CATEGORIES: Category[] = [
     amount: 100,
     color: '#F59E0B', // amber
     icon: 'tv',
+    priority: 5,
+    maxAmount: 200,
   },
   {
     id: '4',
@@ -46,6 +65,8 @@ const DEFAULT_CATEGORIES: Category[] = [
     amount: 150,
     color: '#10B981', // green
     icon: 'shopping-cart',
+    priority: 3,
+    maxAmount: 300,
   },
   {
     id: '5',
@@ -54,6 +75,8 @@ const DEFAULT_CATEGORIES: Category[] = [
     amount: 150,
     color: '#8B5CF6', // purple
     icon: 'trending-up',
+    priority: 4,
+    maxAmount: 1000,
   },
   {
     id: '6',
@@ -62,6 +85,7 @@ const DEFAULT_CATEGORIES: Category[] = [
     amount: 100,
     color: '#0D9488', // teal
     icon: 'coffee',
+    priority: 6,
   },
 ];
 
@@ -78,6 +102,7 @@ const DEFAULT_BUDGET: UserBudget = {
       description: 'Initial deposit',
     },
   ],
+  scheduledPayments: [],
 };
 
 // Local storage keys
@@ -87,7 +112,7 @@ const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
 
 export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [budget, setBudget] = useState<UserBudget>(DEFAULT_BUDGET);
-  const { toast } = useToast();
+  const { toast: uiToast } = useToast();
 
   // Load data from localStorage on initial render
   useEffect(() => {
@@ -100,6 +125,17 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           ...t,
           date: new Date(t.date),
         }));
+        
+        // Convert scheduled payment dates
+        if (parsed.scheduledPayments) {
+          parsed.scheduledPayments = parsed.scheduledPayments.map((p: any) => ({
+            ...p,
+            nextDate: new Date(p.nextDate),
+          }));
+        } else {
+          parsed.scheduledPayments = [];
+        }
+        
         setBudget(parsed);
       } catch (error) {
         console.error('Failed to parse saved budget:', error);
@@ -113,45 +149,138 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     localStorage.setItem(STORAGE_KEY, JSON.stringify(budget));
   }, [budget]);
 
+  // Process scheduled payments
+  useEffect(() => {
+    const checkScheduledPayments = () => {
+      const now = new Date();
+      let updatedBudget = { ...budget };
+      let paymentsProcessed = false;
+      
+      const updatedPayments = budget.scheduledPayments.map(payment => {
+        if (!payment.active) return payment;
+        
+        const paymentDate = new Date(payment.nextDate);
+        if (paymentDate <= now) {
+          // Process this payment
+          const result = processPayment(
+            updatedBudget,
+            payment.amount,
+            payment.description,
+            payment.category
+          );
+          
+          if (result.success) {
+            updatedBudget = result.updatedBudget;
+            paymentsProcessed = true;
+            
+            // Update next date for recurring payments
+            if (payment.recurring && payment.frequency) {
+              const newDate = new Date(paymentDate);
+              switch (payment.frequency) {
+                case 'daily':
+                  newDate.setDate(newDate.getDate() + 1);
+                  break;
+                case 'weekly':
+                  newDate.setDate(newDate.getDate() + 7);
+                  break;
+                case 'monthly':
+                  newDate.setMonth(newDate.getMonth() + 1);
+                  break;
+              }
+              
+              toast.success(`Scheduled payment processed: ${payment.description}`);
+              return { ...payment, nextDate: newDate };
+            } else {
+              // One-time payment, mark as inactive
+              toast.success(`One-time payment processed: ${payment.description}`);
+              return { ...payment, active: false };
+            }
+          } else {
+            // Failed to process payment due to insufficient funds
+            toast.error(`Failed to process scheduled payment: ${payment.description} - Insufficient funds`);
+            return { ...payment, active: false };
+          }
+        }
+        
+        return payment;
+      });
+      
+      if (paymentsProcessed) {
+        setBudget({
+          ...updatedBudget,
+          scheduledPayments: updatedPayments,
+        });
+      }
+    };
+    
+    // Check immediately and then set interval
+    checkScheduledPayments();
+    const interval = setInterval(checkScheduledPayments, 60000); // Check every minute
+    
+    return () => clearInterval(interval);
+  }, [budget]);
+
   // Calculate how much to allocate to each category
   const distributeIncome = (amount: number) => {
     const { categories } = budget;
     const newCategories = [...categories];
     
-    let remainingPercentage = 100;
+    // Sort categories by priority (lower number = higher priority)
+    newCategories.sort((a, b) => (a.priority || 999) - (b.priority || 999));
+    
     let remainingAmount = amount;
     
-    // First, handle the Daily Use category
-    const dailyUseIndex = newCategories.findIndex(c => c.name === 'Daily Use');
-    if (dailyUseIndex !== -1) {
-      const dailyUseCategory = newCategories[dailyUseIndex];
-      const dailyAllocation = amount * (dailyUseCategory.percentage / 100);
-      newCategories[dailyUseIndex] = {
-        ...dailyUseCategory,
-        amount: dailyUseCategory.amount + dailyAllocation,
-      };
-      remainingPercentage -= dailyUseCategory.percentage;
-      remainingAmount -= dailyAllocation;
+    // Distribute to categories based on priority and percentage
+    for (let i = 0; i < newCategories.length; i++) {
+      if (remainingAmount <= 0) break;
+      
+      const category = newCategories[i];
+      const targetAmount = category.maxAmount;
+      
+      if (targetAmount !== undefined && category.name !== 'Daily Use') {
+        // If there's a max amount, only allocate up to that max
+        const spaceAvailable = Math.max(0, targetAmount - category.amount);
+        const allocation = Math.min(
+          spaceAvailable,
+          remainingAmount * (category.percentage / 100)
+        );
+        
+        newCategories[i] = {
+          ...category,
+          amount: category.amount + allocation,
+        };
+        
+        remainingAmount -= allocation;
+      } else {
+        // No max amount, allocate based on percentage
+        const allocation = remainingAmount * (category.percentage / 100);
+        
+        newCategories[i] = {
+          ...category,
+          amount: category.amount + allocation,
+        };
+        
+        remainingAmount -= allocation;
+      }
     }
     
-    // Then distribute the rest proportionally
-    newCategories.forEach((category, index) => {
-      if (index !== dailyUseIndex) {
-        const adjustedPercentage = category.percentage / remainingPercentage;
-        const categoryAmount = remainingAmount * adjustedPercentage;
-        newCategories[index] = {
-          ...category,
-          amount: category.amount + categoryAmount,
+    // If there's still money left, put it in savings
+    if (remainingAmount > 0) {
+      const savingsIndex = newCategories.findIndex(c => c.name === 'Savings');
+      if (savingsIndex !== -1) {
+        newCategories[savingsIndex] = {
+          ...newCategories[savingsIndex],
+          amount: newCategories[savingsIndex].amount + remainingAmount,
         };
       }
-    });
+    }
     
     return newCategories;
   };
 
   const addIncome = (amount: number, description: string) => {
     if (amount <= 0) {
-      toast({
+      uiToast({
         title: "Invalid amount",
         description: "Please enter a positive amount",
         variant: "destructive",
@@ -176,7 +305,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       transactions: [newTransaction, ...prev.transactions],
     }));
 
-    toast({
+    uiToast({
       title: "Income added",
       description: `$${amount.toFixed(2)} has been distributed to your categories`,
     });
@@ -184,7 +313,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const withdrawFromCategory = (categoryId: string, amount: number, description: string) => {
     if (amount <= 0) {
-      toast({
+      uiToast({
         title: "Invalid amount",
         description: "Please enter a positive amount",
         variant: "destructive",
@@ -194,7 +323,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     const categoryIndex = budget.categories.findIndex(c => c.id === categoryId);
     if (categoryIndex === -1) {
-      toast({
+      uiToast({
         title: "Category not found",
         description: "The selected category doesn't exist",
         variant: "destructive",
@@ -204,7 +333,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     const category = budget.categories[categoryIndex];
     if (category.amount < amount) {
-      toast({
+      uiToast({
         title: "Insufficient funds",
         description: `Not enough money in ${category.name}`,
         variant: "destructive",
@@ -234,24 +363,233 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       transactions: [newTransaction, ...prev.transactions],
     }));
 
-    toast({
+    uiToast({
       title: "Withdrawal successful",
       description: `$${amount.toFixed(2)} withdrawn from ${category.name}`,
     });
   };
 
-  const addCategory = (categoryData: Omit<Category, 'id' | 'amount'>) => {
-    const totalPercentage = budget.categories.reduce((sum, cat) => sum + cat.percentage, 0);
+  // A helper function to process a payment from one or more categories
+  const processPayment = (
+    currentBudget: UserBudget,
+    amount: number,
+    description: string,
+    preferredCategoryId?: string,
+    fallbackCategoryId?: string
+  ) => {
+    let updatedCategories = [...currentBudget.categories];
+    let remainingAmount = amount;
+    let transactionCategories: string[] = [];
+    let success = false;
     
-    if (totalPercentage + categoryData.percentage > 100) {
-      toast({
-        title: "Invalid percentage",
-        description: "Total allocation cannot exceed 100%",
+    // Function to withdraw from a specific category
+    const withdrawFromCat = (categoryId: string, amountToWithdraw: number) => {
+      const index = updatedCategories.findIndex(c => c.id === categoryId);
+      if (index === -1) return 0;
+      
+      const category = updatedCategories[index];
+      const availableAmount = Math.min(category.amount, amountToWithdraw);
+      
+      if (availableAmount > 0) {
+        updatedCategories[index] = {
+          ...category,
+          amount: category.amount - availableAmount,
+        };
+        
+        transactionCategories.push(categoryId);
+        return availableAmount;
+      }
+      
+      return 0;
+    };
+    
+    // If preferred category is specified, try that first
+    if (preferredCategoryId) {
+      const withdrawn = withdrawFromCat(preferredCategoryId, remainingAmount);
+      remainingAmount -= withdrawn;
+    }
+    
+    // If still need more money and no preferred category (or it wasn't enough)
+    if (remainingAmount > 0 && !preferredCategoryId) {
+      // Try daily use first
+      const dailyUseCategory = updatedCategories.find(c => c.name === 'Daily Use');
+      if (dailyUseCategory) {
+        const withdrawn = withdrawFromCat(dailyUseCategory.id, remainingAmount);
+        remainingAmount -= withdrawn;
+      }
+    }
+    
+    // If still need more money, try savings
+    if (remainingAmount > 0 && !preferredCategoryId) {
+      const savingsCategory = updatedCategories.find(c => c.name === 'Savings');
+      if (savingsCategory) {
+        const withdrawn = withdrawFromCat(savingsCategory.id, remainingAmount);
+        remainingAmount -= withdrawn;
+      }
+    }
+    
+    // If fallback category is specified and we still need more
+    if (remainingAmount > 0 && fallbackCategoryId) {
+      const withdrawn = withdrawFromCat(fallbackCategoryId, remainingAmount);
+      remainingAmount -= withdrawn;
+    }
+    
+    // If we've managed to cover the amount
+    if (remainingAmount <= 0.01) { // Allow for small floating-point errors
+      const newTransaction: Transaction = {
+        id: uuidv4(),
+        amount,
+        type: 'payment',
+        category: transactionCategories.join(','),
+        date: new Date(),
+        description,
+      };
+      
+      success = true;
+      
+      return {
+        success: true,
+        updatedBudget: {
+          ...currentBudget,
+          totalBalance: currentBudget.totalBalance - amount,
+          categories: updatedCategories,
+          transactions: [newTransaction, ...currentBudget.transactions],
+        }
+      };
+    }
+    
+    return { 
+      success: false,
+      remainingAmount,
+      updatedBudget: currentBudget
+    };
+  };
+
+  // Make a payment
+  const makePayment = (
+    amount: number,
+    description: string,
+    preferredCategoryId?: string,
+    fallbackCategoryId?: string
+  ) => {
+    if (amount <= 0) {
+      uiToast({
+        title: "Invalid amount",
+        description: "Please enter a positive amount",
+        variant: "destructive",
+      });
+      return { success: false };
+    }
+    
+    const result = processPayment(
+      budget,
+      amount,
+      description,
+      preferredCategoryId,
+      fallbackCategoryId
+    );
+    
+    if (result.success) {
+      setBudget(result.updatedBudget);
+      
+      uiToast({
+        title: "Payment successful",
+        description: `$${amount.toFixed(2)} payment completed`,
+      });
+      
+      return { success: true };
+    } else {
+      uiToast({
+        title: "Insufficient funds",
+        description: "You don't have enough funds to complete this payment",
+        variant: "destructive",
+      });
+      
+      return { 
+        success: false,
+        insufficientFunds: true,
+        remainingAmount: result.remainingAmount
+      };
+    }
+  };
+
+  // Schedule a payment
+  const schedulePayment = (options: {
+    amount: number;
+    description: string;
+    date: Date;
+    recurring?: boolean;
+    frequency?: 'daily' | 'weekly' | 'monthly';
+    preferredCategory?: string;
+  }) => {
+    const { amount, description, date, recurring = false, frequency, preferredCategory } = options;
+    
+    if (amount <= 0) {
+      uiToast({
+        title: "Invalid amount",
+        description: "Please enter a positive amount",
         variant: "destructive",
       });
       return;
     }
+    
+    // Format time as HH:MM
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const timeString = `${hours}:${minutes}`;
+    
+    const newPayment: ScheduledPayment = {
+      id: uuidv4(),
+      amount,
+      category: preferredCategory || '', // Empty string means auto (Daily Use, then Savings)
+      description,
+      nextDate: date,
+      recurring,
+      frequency: recurring ? frequency : undefined,
+      time: timeString,
+      active: true,
+    };
+    
+    setBudget(prev => ({
+      ...prev,
+      scheduledPayments: [newPayment, ...prev.scheduledPayments],
+    }));
+    
+    uiToast({
+      title: "Payment scheduled",
+      description: `${recurring ? 'Recurring' : 'One-time'} payment scheduled for ${date.toLocaleDateString()}`,
+    });
+  };
 
+  // Toggle a scheduled payment
+  const toggleScheduledPayment = (paymentId: string, active: boolean) => {
+    setBudget(prev => ({
+      ...prev,
+      scheduledPayments: prev.scheduledPayments.map(payment => 
+        payment.id === paymentId ? { ...payment, active } : payment
+      ),
+    }));
+    
+    uiToast({
+      title: active ? "Payment activated" : "Payment paused",
+      description: active ? "Scheduled payment has been activated" : "Scheduled payment has been paused",
+    });
+  };
+
+  // Cancel a scheduled payment
+  const cancelScheduledPayment = (paymentId: string) => {
+    setBudget(prev => ({
+      ...prev,
+      scheduledPayments: prev.scheduledPayments.filter(payment => payment.id !== paymentId),
+    }));
+    
+    uiToast({
+      title: "Payment canceled",
+      description: "Scheduled payment has been canceled",
+    });
+  };
+
+  const addCategory = (categoryData: Omit<Category, 'id' | 'amount'>) => {
     const newCategory: Category = {
       id: uuidv4(),
       amount: 0, // New categories start with $0
@@ -263,7 +601,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       categories: [...prev.categories, newCategory],
     }));
 
-    toast({
+    uiToast({
       title: "Category added",
       description: `${categoryData.name} has been added to your budget`,
     });
@@ -274,23 +612,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const index = categories.findIndex(c => c.id === updatedCategory.id);
     
     if (index === -1) {
-      toast({
+      uiToast({
         title: "Category not found",
         description: "The category you're trying to update doesn't exist",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Calculate total percentage without this category
-    const otherCategoriesPercentage = categories
-      .filter(c => c.id !== updatedCategory.id)
-      .reduce((sum, cat) => sum + cat.percentage, 0);
-
-    if (otherCategoriesPercentage + updatedCategory.percentage > 100) {
-      toast({
-        title: "Invalid percentage",
-        description: "Total allocation cannot exceed 100%",
         variant: "destructive",
       });
       return;
@@ -303,7 +627,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       categories,
     }));
 
-    toast({
+    uiToast({
       title: "Category updated",
       description: `${updatedCategory.name} has been updated`,
     });
@@ -313,7 +637,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const categoryIndex = budget.categories.findIndex(c => c.id === categoryId);
     
     if (categoryIndex === -1) {
-      toast({
+      uiToast({
         title: "Category not found",
         description: "The category you're trying to delete doesn't exist",
         variant: "destructive",
@@ -329,16 +653,25 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     
     // Redistribute the remaining amount in the deleted category
     if (remainingAmount > 0 && updatedCategories.length > 0) {
-      // Distribute proportionally based on percentage
-      const totalPercentage = updatedCategories.reduce((sum, cat) => sum + cat.percentage, 0);
-      
-      updatedCategories.forEach((category, index) => {
-        const proportion = category.percentage / totalPercentage;
-        updatedCategories[index] = {
-          ...category,
-          amount: category.amount + (remainingAmount * proportion),
+      // Find savings category to transfer funds
+      const savingsIndex = updatedCategories.findIndex(c => c.name === 'Savings');
+      if (savingsIndex !== -1) {
+        updatedCategories[savingsIndex] = {
+          ...updatedCategories[savingsIndex],
+          amount: updatedCategories[savingsIndex].amount + remainingAmount
         };
-      });
+      } else {
+        // If no savings category, distribute proportionally
+        const totalPercentage = updatedCategories.reduce((sum, cat) => sum + cat.percentage, 0);
+        
+        updatedCategories.forEach((category, index) => {
+          const proportion = category.percentage / totalPercentage;
+          updatedCategories[index] = {
+            ...category,
+            amount: category.amount + (remainingAmount * proportion),
+          };
+        });
+      }
     }
 
     setBudget(prev => ({
@@ -346,9 +679,33 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       categories: updatedCategories,
     }));
 
-    toast({
+    uiToast({
       title: "Category deleted",
       description: `${categoryToDelete.name} has been deleted and funds redistributed`,
+    });
+  };
+
+  const updateCategoryPriorities = (categories: Array<{ id: string; priority: number; maxAmount: number | undefined }>) => {
+    const updatedCategories = budget.categories.map(category => {
+      const updatedCategory = categories.find(c => c.id === category.id);
+      if (updatedCategory) {
+        return {
+          ...category,
+          priority: updatedCategory.priority,
+          maxAmount: updatedCategory.maxAmount
+        };
+      }
+      return category;
+    });
+    
+    setBudget(prev => ({
+      ...prev,
+      categories: updatedCategories,
+    }));
+    
+    uiToast({
+      title: "Priorities updated",
+      description: "Category priorities and limits have been updated",
     });
   };
 
@@ -367,6 +724,11 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         updateCategory,
         deleteCategory,
         getDailyBalance,
+        makePayment,
+        schedulePayment,
+        toggleScheduledPayment,
+        cancelScheduledPayment,
+        updateCategoryPriorities,
       }}
     >
       {children}
